@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+.idea/
+.vscode/
+
+# Generated meshes, reports, campaigns, and browser jobs.
+output/**
+!output/.gitkeep
+
+# Legacy output locations (kept ignored during migration).
+*.e
+*.vtk
+*.report.json
+campaign/
+out/

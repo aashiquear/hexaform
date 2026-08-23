@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+title: "Hexaform: structured all-hexahedral meshing for natural-shaped inclusions"
+message: "If you use Hexaform in published work, please cite it."
+type: software
+authors:
+  - name: "Hexaform contributors"
+version: 0.2.0
+date-released: "2026-08-23"
+license: MIT
+abstract: >-
+  Hexaform generates conforming, non-voxelated, all-hexahedral
+  (HEX8/HEX20/HEX27) finite element meshes of a cuboidal domain containing curved internal
+  boundaries, with native Exodus II output. Rather than attempting general
+  all-hexahedral meshing, which remains an open problem, it exploits the
+  analytic structure of star-shaped inclusions: each inclusion is meshed with a
+  cubed-sphere O-grid block inside a macro-box aligned to whole background grid
+  cells, so that the block and the background weld exactly and the mesh is
+  conforming by construction. Interface nodes lie on the analytic surface to
+  machine precision and the residual facet-induced geometric error converges at
+  second order. Intended for elastoplastic phase-field fracture models of
+  particulate microstructures.
+keywords:
+  - mesh generation
+  - hexahedral mesh
+  - Exodus II
+  - finite element method
+  - phase-field fracture
+  - representative volume element
+  - cubed sphere

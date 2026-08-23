@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Generate, validate, and inspect Hexaform hexahedral meshes.">
+  <title>Hexaform Mesh Studio</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='none' stroke='%23006c64' stroke-width='2' d='M6 9l10-6 10 6v12l-10 8-10-8zM6 9l10 7 10-7M16 16v13'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Hexaform home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><b>HEXA</b>FORM</span>
+    </a>
+    <div class="top-status"><span id="health-dot" class="dot"></span><span id="health">Connecting</span></div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div>
+        <p class="eyebrow">MESH STUDIO / LOCAL SESSION</p>
+        <h1>Shape the volume.<br><em>Trust the topology.</em></h1>
+        <p>Generate validated all-hexahedral RVEs from analytic inclusions, inspect curved interfaces in the browser, then export native Exodus II or VTK.</p>
+      </div>
+      <div class="format-badge"><span>OUTPUT</span><b>HEX8 · HEX20 · HEX27</b><small>EXODUS II / VTK</small></div>
+    </section>
+
+    <section class="workspace">
+      <aside class="controls" aria-label="Mesh controls">
+        <div class="panel-head"><span>01</span><h2>Geometry</h2></div>
+        <div class="control-grid">
+          <label>Domain length<input id="length" type="number" min="0.01" step="0.1" value="1"></label>
+          <label>Cells / edge<input id="density" type="number" min="4" max="128" step="1" value="12"></label>
+          <label>Shape<select id="shape"><option value="sphere_source">Spheres</option><option value="ellipsoid_source">Ellipsoids</option><option value="superquadric_source">Superquadrics</option><option value="grain_source">Natural grains</option></select></label>
+          <label>Particles<input id="particles" type="number" min="0" max="100" step="1" value="3"></label>
+          <label>Mean radius<input id="radius" type="number" min="0.001" step="0.005" value="0.10"></label>
+          <label>Radius deviation<input id="radius-std" type="number" min="0" step="0.005" value="0.01"></label>
+        </div>
+
+        <div class="panel-head section"><span>02</span><h2>Discretization</h2></div>
+        <div class="control-grid">
+          <label>Element<select id="element"><option>HEX8</option><option>HEX20</option><option>HEX27</option></select></label>
+          <label>Packing<select id="packer"><option value="rsa">RSA</option><option value="collective">Collective</option></select></label>
+          <label>Random seed<input id="seed" type="number" step="1" value="7"></label>
+          <label>Min. Jacobian<input id="jacobian" type="number" min="0" max="1" step="0.05" value="0.2"></label>
+        </div>
+        <div class="switch-row">
+          <label class="switch"><input id="periodic" type="checkbox"><span></span>Periodic boundaries</label>
+          <label class="switch"><input id="pillow" type="checkbox"><span></span>Interface pillow</label>
+          <label class="switch"><input id="smoothing" type="checkbox"><span></span>Constrained smoothing</label>
+        </div>
+
+        <button id="generate" class="generate"><span>Generate mesh</span><b aria-hidden="true">↗</b></button>
+        <p id="form-note" class="form-note">A 12³ preset typically completes in seconds. Large meshes run synchronously in this release.</p>
+      </aside>
+
+      <section class="viewer-panel" aria-label="Mesh preview">
+        <div class="viewer-head">
+          <div><span class="kicker">LIVE VIEW</span><h2>Interface topology</h2></div>
+          <div class="view-actions">
+            <label><input id="show-boundary" type="checkbox" checked> Boundary</label>
+            <button id="reset-view" type="button">Reset view</button>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="viewer" aria-label="Interactive three-dimensional mesh preview"></canvas>
+          <div id="empty-state" class="empty-state"><span class="empty-cube">⬡</span><b>Ready to generate</b><small>Drag to orbit · scroll to zoom</small></div>
+          <div class="legend"><span><i class="interface"></i>Material interface</span><span><i class="boundary"></i>Domain boundary</span><span class="quality-scale">LOW <i></i> HIGH</span></div>
+        </div>
+        <div id="stats" class="stats" aria-live="polite">
+          <article><span>ELEMENTS</span><b>—</b></article><article><span>NODES</span><b>—</b></article><article><span>MIN SCALED J</span><b>—</b></article><article><span>STATUS</span><b>WAITING</b></article>
+        </div>
+      </section>
+    </section>
+
+    <section id="results" class="results" hidden>
+      <div class="result-copy"><p class="eyebrow">VALIDATION / ARTIFACTS</p><h2 id="result-title">Mesh complete</h2><p id="result-message"></p></div>
+      <div id="downloads" class="downloads"></div>
+      <details><summary>Compiled run report</summary><pre id="report-json"></pre></details>
+    </section>
+  </main>
+
+  <footer><span>Hexaform runs locally. Mesh data stays on this machine.</span><a href="/docs">API schema</a></footer>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

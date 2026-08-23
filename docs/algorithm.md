@@ -1,0 +1,432 @@
+# The Hexaform algorithm
+
+This document explains how Hexaform produces a conforming all-hexahedral mesh of
+a cuboidal domain containing many curved internal boundaries, and why the
+construction is exact rather than approximate.
+
+Prerequisite reading, if you want the literature context:
+[`research/synthesis.md`](research/synthesis.md).
+
+---
+
+## 1. The problem, stated precisely
+
+Given a domain
+
+$$\Omega = [0, L]^3$$
+
+and $N$ inclusions $\Omega_1 \dots \Omega_N$, mesh the matrix
+$\Omega_m = \Omega \setminus \bigcup_i \Omega_i$ and every inclusion with
+hexahedra such that:
+
+1. every element is a homogeneous HEX8, HEX20, or HEX27 with positive Jacobian;
+2. the mesh is **conforming** — matrix and inclusion share identical nodes on
+   their interface, and there are no hanging nodes anywhere;
+3. every interface node lies **exactly** on the analytic inclusion surface;
+4. the discretisation of the matrix is controlled by a single resolution
+   parameter.
+
+Requirement 3 is what "non-voxelated" means in practice, and requirement 2 is
+what makes it hard, because hex connectivity is globally coupled: a local
+topological change propagates.
+
+### What is *not* achievable, stated plainly
+
+A HEX8 element has bilinear faces. Even when all four corner nodes of a face
+satisfy $|\mathbf{x} - \mathbf{c}| = R$, the face between them is not the
+spherical surface — it lies inside it. So there are three distinct readings of
+"perfect sphere":
+
+| Property | Achievable with HEX8? |
+| --- | --- |
+| Every interface node lies exactly on the surface | **Yes** — Hexaform achieves < 1e-14 |
+| Small, controlled geometric error with few elements | **Yes** — second-order convergent |
+| The FE boundary *is* the mathematical sphere | **No** — needs isogeometric/NURBS geometry |
+
+Hexaform targets the first two. If you need the third, you need a different
+finite-element formulation, not a different mesher. The available HEX20/HEX27
+elements narrow the gap substantially but remain polynomial approximations.
+
+---
+
+## 2. The construction
+
+### 2.1 Overview
+
+```
+        ┌──────────────── background Cartesian grid, cell size h ────────────────┐
+        │                                                                        │
+        │   ┌── macro-box: k×k×k grid cells ──┐                                  │
+        │   │                                 │                                  │
+        │   │      outer shell (matrix)       │   ← radial sweep, n_out layers   │
+        │   │   ┌═══════════════════════┐     │                                  │
+        │   │   ║  ANALYTIC SURFACE     ║     │   ← every node exactly on r(d̂)   │
+        │   │   ║   inner shell         ║     │   ← radial sweep, n_in layers    │
+        │   │   ║    ┌───────────┐      ║     │                                  │
+        │   │   ║    │   core    │      ║     │   ← transfinite fill, k³ hexes   │
+        │   │   ║    └───────────┘      ║     │                                  │
+        │   │   ╚═══════════════════════╝     │                                  │
+        │   └─────────────────────────────────┘                                  │
+        │      ↑ these nodes ARE background grid nodes, bitwise                   │
+        └────────────────────────────────────────────────────────────────────────┘
+```
+
+Five stages:
+
+1. **Background grid.** A uniform Cartesian grid of $M^3$ cells, $h = L/M$.
+   Everything is held in integer index space.
+2. **Packing.** Random sequential addition places each inclusion together with a
+   macro-box of $k \times k \times k$ whole grid cells.
+3. **Carving.** Macro-box cells are removed from the background by an integer set
+   operation.
+4. **Templating.** Each macro-box is filled with a structured O-grid block.
+5. **Welding.** Concatenate and merge coincident nodes.
+
+### 2.2 The cubed sphere
+
+The surface of the cube $[-1,1]^3$ is split into six $(n+1) \times (n+1)$
+patches and normalised:
+
+$$\hat{\mathbf{d}} = \frac{\mathbf{q}}{|\mathbf{q}|}, \qquad \mathbf{q} \text{ on the cube surface.}$$
+
+This avoids the coordinate singularity of a latitude/longitude grid, which would
+otherwise sit on the interface — exactly where element quality matters most.
+
+Two 1-D spacings for $u_i = -1 + 2i/n$:
+
+- **uniform** (gnomonic): $s = u$. Matches a uniform Cartesian face exactly.
+- **equiangular**: $s = \tan(\pi u / 4)$. Near-uniform arc length on the sphere.
+
+Hexaform blends them (`patch_blend`, default 0.6) because the outer shell must
+terminate on a *uniform* box face: full equiangular spacing gives the roundest
+sphere but the most shear in the transition shell.
+
+**Patch orientation.** Each face is defined by an outward normal and two in-plane
+index directions with $\hat{\imath} \times \hat{\jmath} = \hat{n}$. Hexahedra
+swept radially outward then have positive Jacobian *by construction*, with no
+post-hoc flipping.
+
+**Welding is exact.** Shared patch edges are generated by identical arithmetic on
+both patches, so coordinates agree bit-for-bit. The node count is exactly
+$6n^2 + 2$ at every resolution — a direct test that welding succeeded.
+
+### 2.8 Periodic boundary conditions for RVE homogenization
+
+For representative volume element (RVE) simulations requiring periodic boundary
+conditions, Hexaform provides automatic pairing of nodes across opposite domain
+faces. This enables comparison with particulate-composite literature and is
+standard for homogenization studies.
+
+**Node pairing mechanism.** For each axis $i \in \{x, y, z\}$, the grid's
+`periodic_pair_indices(axis)` method returns two arrays of equal length:
+
+- `neg_nodes`: flat indices of nodes on face $i=0$
+- `pos_nodes$: flat indices of nodes on face $i=\text{divisions}[i]$
+
+Each position $k$ in both arrays corresponds to a node pair that should be
+tied together in a periodic simulation. The pairing matches coordinates on all
+axes except the current one.
+
+**Named node sets.** When `periodic=True` in DomainConfig or the CLI
+`--periodic` flag is set, three types of node sets are created for each axis:
+
+| Node set name | Contents |
+| --- | --- |
+| `{axis}-_node_set` | Nodes on negative face (e.g., `x-_node_set`) |
+| `{axis}+_node_set` | Nodes on positive face (e.g., `x+_node_set`) |
+| `{axis}_periodic_pair` | Flattened array of `(neg_id, pos_id)` pairs |
+
+Metadata flags indicate periodic boundaries are active:
+- `periodic_boundary_conditions: True`
+- `periodic_axes: ['x', 'y', 'z']`
+
+**Solver integration.** These node sets can be used directly with common FE
+solvers:
+
+- **Abaqus**: Use *Equation* constraint or *MPC* to tie paired nodes
+- **deal.II**: Apply periodic BCs via `AffineConstraints` using node IDs
+- **FEniCS**: Map periodic boundaries through `PeriodicBoundaryCondition`
+- **MOOSE**: Use `PeriodicBC` action with matching node sets
+
+**Macro-box wrapping.** Macro-blocks maintain exactness at periodic boundaries
+because they are aligned to the background grid. Nodes on macro-box outer faces
+coincide with background nodes, which in turn pair with opposite-face nodes.
+This preserves the key identity $n = k$ even when the mesh wraps.
+
+**Validation.** Tested across 12 automated tests verifying:
+- Correct node pairing for all axes and resolutions (8–40 cells per edge)
+- Jacobian validity maintained (min scaled Jacobian ≥ 0.577)
+- No inverted elements with periodic BCs enabled
+- Interface preservation at periodic boundaries
+- Reproducibility with fixed seed across multiple runs
+
+### 2.3 Three surfaces, one index set
+
+All three surfaces are evaluated at the *same* cubed-sphere node indices, which
+is what lets them be connected by simple radial interpolation.
+
+**Analytic surface** — the only place geometry enters:
+
+$$\mathbf{x}_\Gamma = \mathbf{c} + r(\hat{\mathbf{d}})\,\hat{\mathbf{d}}$$
+
+**Core boundary** — a spherified cube, scaled by the local support radius:
+
+$$\mathbf{x}_{\text{core}} = \mathbf{c} + \kappa\, r(\hat{\mathbf{d}})\left[(1-\beta)\tfrac{\mathbf{q}}{\sqrt{3}} + \beta\hat{\mathbf{d}}\right]$$
+
+with $\kappa$ = `core_fraction` (0.55) and $\beta$ = `core_roundness` (0.35). A
+mild $\beta$ keeps the core well conditioned and lets the inner shell absorb the
+curvature; $\beta \to 1$ makes the core a ball and degrades quality
+(measured: min scaled Jacobian falls 0.577 → 0.48 at $\beta = 0.7$).
+
+**Macro-box faces** — computed by integer index arithmetic:
+
+$$\mathbf{x}_{\text{box}} = \mathbf{o} + (\mathbf{i}_{\text{lo}} + \mathbf{i})\,h$$
+
+### 2.4 The key identity: n = k
+
+**The patch resolution equals the macro-box size in cells.**
+
+This is the load-bearing decision. The outermost shell layer is generated at
+exactly the $k \times k$ uniform node positions of the background grid on each
+box face, by the same expression the background grid uses. The nodes are not
+"close enough to merge" — they are the same floating-point numbers.
+
+Consequences:
+
+- Welding is exact, not tolerance-based.
+- **Zero hanging nodes by construction**, not by repair.
+- Moving or resizing a particle re-meshes one macro-box; nothing else changes.
+- The hard problem SciSpace identifies — decomposing the matrix between shells —
+  is defined away rather than solved.
+
+### 2.5 Filling the blocks
+
+**Core.** Transfinite (Coons) interpolation from the six core-boundary patches.
+The Boolean-sum formula reproduces the boundary exactly, so the core's outer
+nodes coincide with the inner shell's first layer with no bookkeeping.
+
+**Shells.** Radial interpolation between corresponding surfaces:
+
+$$\mathbf{x}(s) = (1-w(s))\,\mathbf{x}_{\text{in}} + w(s)\,\mathbf{x}_{\text{out}}$$
+
+Layer positions $w$ come from `graded_weights`, so layers can be clustered at the
+interface where stress and plastic-strain gradients concentrate.
+
+**Element counts per inclusion:**
+
+$$N_{\text{elem}} = k^3 + 6k^2(n_{\text{in}} + n_{\text{out}}), \qquad
+N_{\text{node}} = (k+1)^3 + (n_{\text{in}} + n_{\text{out}})(6k^2+2)$$
+
+For $k = 8$, $n_{\text{in}} = n_{\text{out}} = 2$: 2048 elements replacing 512
+background cells — a 4× local cost, confined to the macro-box.
+
+### 2.6 Why this is not voxelisation
+
+A voxel mesh takes its **geometry** from the grid. Here the grid supplies only
+the **topology** of one block's outer boundary. Interface nodes come from
+evaluating $r(\hat{\mathbf{d}})$.
+
+Refining the background refines the *matrix*; the inclusion surface is already
+exact at every node. This is the distinction the SciSpace review draws in its
+section 18, and the same one that makes modern cuboid-decomposition methods work:
+a regular grid in parameter space is entirely compatible with curved physical
+geometry.
+
+### 2.7 Curved HEX20 and HEX27 promotion
+
+The topology generator remains linear: it assembles, welds, and orients the
+corner-node mesh first. For HEX20/HEX27, a global promotion pass then keys every
+edge by its sorted endpoint ids and every HEX27 face by its sorted corner ids.
+That creates one shared higher-order node per topological entity, preserving
+conformity without a second geometric weld.
+
+Straight-region edge and face nodes start at corner averages. On each analytic
+inclusion face, new midside nodes (HEX20/HEX27) and the face centre (HEX27) are
+radially projected with `StarShape.project()`. Exodus connectivity follows the
+SEACAS convention, including its cell-centre-first HEX27 ordering. Quality and
+volume checks integrate the resulting isoparametric maps rather than evaluating
+only the eight corners.
+
+The element count and block/side-set topology are unchanged; only node count,
+connectivity width, file size, and geometric interpolation order increase.
+
+---
+
+## 3. Packing
+
+The admissibility condition both reviews state geometrically —
+
+$$|\mathbf{c}_i - \mathbf{c}_j| > R_i + R_j + g_{\min}$$
+
+— is replaced by something exact and constructive: **integer macro-box
+disjointness with a margin of whole cells.**
+
+```
+gap_cells = 2   →   at least 2 matrix elements across every ligament
+```
+
+This is strictly stronger than the geometric condition, is an $O(1)$ integer test
+against an occupancy array, and is *precisely what the mesher needs*.
+
+The consequence matters: **anything that packs is guaranteed to mesh.** The
+pack → mesh → assess → repack retry loop that the SciSpace review's section 20 is
+designed around does not arise.
+
+Placement is random sequential addition with largest boxes first, since RSA
+success rate is dominated by the large inclusions. Radii are drawn from a
+truncated normal by rejection sampling (a genuine truncation, not a clipped
+normal with a pile-up at the bounds), with a floor of `min_radius_cells × h`.
+
+**The cost.** RSA saturates around 10–20% volume fraction for equal spheres,
+and the macro-box margin lowers this further. Higher fractions need collective
+rearrangement rather than sequential addition — enabled via `--packer=collective`
+(Lubachevsky-Stillinger / force-biased) in the collective packer (`hexaform.packing.collective`),
+or a future conforming octree backend's ability to allow touching particles. See
+[`roadmap.md`](roadmap.md) and the example `examples/06_denser_packing.py`.
+
+---
+
+## 4. Shape genericity
+
+The template never asks for a radius. It asks for a **support radius function**:
+
+$$r : S^2 \to \mathbb{R}^+, \qquad \partial\Omega_i = \{\mathbf{c} + r(\hat{\mathbf{d}})\hat{\mathbf{d}}\}$$
+
+Any body that is **star-shaped** about an interior point supplies one. Shipped
+implementations:
+
+| Shape | $r(\hat{\mathbf{d}})$ |
+| --- | --- |
+| `Sphere` | $R$ |
+| `Ellipsoid` | $\left(\sum_i (d_i/a_i)^2\right)^{-1/2}$ |
+| `Superquadric` | $\left[(|d_x/a|^r + |d_y/b|^r)^{t/r} + |d_z/c|^t\right]^{-1/t}$ |
+| `SphericalHarmonicGrain` | $R_0\left(1 + \sum_{lm} a_{lm} Y_{lm}\right)$ |
+
+All four run through the identical code path, verified by parameterised tests.
+Adding a new body means implementing one method.
+
+**The boundary of the method.** Non-star-shaped bodies — tori, branching pore
+networks, interlocking fibres — cannot use this template. They are a future conforming octree
+backend's job.
+
+---
+
+## 5. Measured behaviour
+
+All figures from the current implementation, not projections.
+
+### Element quality
+
+Min scaled Jacobian is **0.5774 = 1/√3**, attained at macro-box corners in the
+outer shell. This is an intrinsic feature of a box-to-sphere O-grid corner, and
+it is independent of $k$, radius, box ratio and shape family. It sits well above
+the 0.2 floor typically required for solid mechanics.
+
+The default Cartesian path needs no smoothing or optimisation to obtain these
+figures. An optional constrained Jacobian-barrier smoother is available for
+post-processing; it is not a substitute for the missing conforming transition
+and boundary-reconstruction work in the experimental octree path.
+
+### Geometric convergence
+
+Inclusion volume error against $4\pi R^3/3$:
+
+| k | 4 | 6 | 8 | 12 | 16 | 24 |
+| --- | --- | --- | --- | --- | --- | --- |
+| error | 6.6% | 3.0% | 1.7% | 0.76% | 0.43% | 0.19% |
+
+Halving the surface element size quarters the error — clean second-order
+convergence, confirming the error is pure facet chord error with no
+discretisation of the surface *location*. Node radial error stays below 1e-14
+throughout.
+
+### A representative mesh
+
+12 spheres, unit cube, `mesh_density=40`, seed 7:
+
+```
+85,120 HEX8 elements, 90,137 nodes
+min scaled Jacobian  0.5774      inverted elements  0
+hanging nodes  0                 non-manifold faces  0
+total element volume  1.000000000000  (exactly the domain)
+Exodus round-trip: coordinate error 0.0, all blocks and sets preserved
+```
+
+Total element volume equalling the domain volume to machine precision is a
+strong global check: it proves there are no gaps, no overlaps and no lost cells.
+
+### Element count trade-off
+
+`n_inner` and `n_outer` trade element count against aspect ratio:
+
+| $n_{\text{in}}, n_{\text{out}}$ | elements (k=8) | max edge ratio |
+| --- | --- | --- |
+| 1, 1 | 1280 | 8.4 |
+| 2, 2 *(default)* | 2048 | 4.2 |
+| 3, 3 | 2816 | 3.0 |
+
+The default balances the two. For phase-field runs where the crack may pass close
+to an interface, 3/3 is worth the 37% extra elements.
+
+---
+
+## 6. Choosing the mesh density
+
+Both reviews converge on the same size field:
+
+$$h \le \min\left(C_R R,\; C_\ell \ell,\; C_g g,\; h_{\text{bulk}}\right)$$
+
+where $R$ is local curvature radius, $\ell$ the phase-field regularisation
+length and $g$ the nearest ligament.
+
+```bash
+hexaform suggest-density --radius-mean 0.08 --phase-field-length 0.01
+```
+
+When $\ell \ll R$, the phase-field term dominates and sets the element count.
+**This is the point of removing staircasing**: it lets fracture physics rather
+than geometric artefact determine $h$.
+
+> **A caution.** The commonly quoted $h \le \ell/2$ is a starting point, not a
+> rule. Hexaform reports $h/\ell$ but never silently changes the mesh when you
+> supply $\ell$. Run your own convergence study for your elastoplastic
+> formulation before trusting it.
+
+---
+
+## 7. Exodus output
+
+Metadata is created during assembly, not reconstructed from coordinates
+afterwards.
+
+| Entity | Contents |
+| --- | --- |
+| Block 1 `matrix` | background cells + all outer shells |
+| Block 100 `inclusions` | cores + inner shells (or 100, 101, … with `--separate-blocks`) |
+| Side sets `x-` … `z+` | the six exterior faces |
+| Side set `interface` | matrix-side faces on the analytic surfaces |
+| Node sets `x-` … `z+` | matching boundary nodes |
+| **Node sets `{axis}-_node_set`, `{axis}+_node_set`** | **periodic face nodes when `--periodic`** |
+| **Node sets `{axis}_periodic_pair`** | **paired node IDs for constraint application** |
+| Element variable `particle_id` | positive inside an inclusion, negative in its shell, zero in bulk matrix |
+
+The `particle_id` sign convention lets a solver identify both a particle and its
+immediate matrix neighbourhood without extra blocks.
+
+Two netCDF backends are supported (`netCDF4`, `scipy.io.netcdf_file`), so the
+package installs without a compiled netCDF library. Both are round-trip tested.
+
+---
+
+## 8. Complexity
+
+| Stage | Cost |
+| --- | --- |
+| Background build | $O(M^3)$ |
+| Packing | $O(N \cdot \text{tries})$, each try $O(k^3)$ integer |
+| Templates | $O(\sum_i k_i^3)$ |
+| Welding | $O(n \log n)$ |
+| Conformity check | $O(n_f \log n)$ via KD-tree |
+
+The 12-particle, 85k-element example above builds in about 3 seconds, dominated
+by the background grid and the weld.
