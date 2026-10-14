@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added `hexaform plate` / `hexaform.plate.plate_mesh`: rectangular plates with
+  one hexahedron through the thickness and a conforming circular or elliptical
+  through-hole meshed by a graded O-grid ring (node/side sets `hole`, `outer`,
+  blocks `plate` and `ring`), with tests, user-guide and example 12.
+
 ## 0.2.0 - 2026-08-23
 
 - Added a packaged local browser Mesh Studio with interactive quality preview

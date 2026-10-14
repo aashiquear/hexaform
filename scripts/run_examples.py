@@ -22,6 +22,7 @@ CASES = [
     ("09_pillow_layer.py", "--mesh-density", "8", "--output", str(OUT / "09.e")),
     ("10_constrained_smoothing.py", "--mesh-density", "8", "--output", str(OUT / "10.e")),
     ("11_torus.py", "--interface-h", "0.125", "--max-level", "3"),
+    ("12_plate_with_hole.py", str(OUT / "plate")),
 ]
 
 

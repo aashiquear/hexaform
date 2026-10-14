@@ -30,6 +30,7 @@ from .pipeline.config import (
     RunConfig,
 )
 from .pipeline.run import RunResult, particles_in_cube, run
+from .plate import HoleSpec, PlateOptions, plate_mesh, plate_summary
 from .shapes.library import Ellipsoid, Sphere, SphericalHarmonicGrain, Superquadric
 
 __version__ = "0.2.0"
@@ -52,6 +53,10 @@ __all__ = [
     "RunResult",
     "run",
     "particles_in_cube",
+    "HoleSpec",
+    "PlateOptions",
+    "plate_mesh",
+    "plate_summary",
     "validate",
     "assess",
     "scaled_jacobian",

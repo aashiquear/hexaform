@@ -115,6 +115,40 @@ center, and chevron geometries are supported. See
 `phase_field_length` adds resolution metrics to validation but never silently
 changes the mesh.
 
+## Plates with a through-hole
+
+`hexaform plate` meshes a rectangular plate `width x height x thickness` with
+a uniform in-plane background of cell size `h` and ONE hexahedral element
+through the thickness (pseudo-3-D). An optional circular or elliptical
+through-hole is meshed with a block-structured O-grid ring whose nodes lie
+exactly on the analytic curve, so the hole edge is conforming rather than
+staircased; the ring hands over to the background on a grid-aligned
+transition rectangle without transition elements.
+
+```bash
+hexaform plate --width 100 --height 50 --thickness 1 --h 2.5 \
+  --hole circle:5 -o output/plate_hole5.e --write-vtk --summary output/plate_hole5.json
+hexaform plate --h 2.5 --hole ellipse:7.5,2.5,30   # full axes 7.5 and 2.5, rotated 30 deg
+```
+
+Options: `--centre CX CY` (default plate centre), `--transition KX KY`
+(half-extents of the O-grid rectangle in background cells; default leaves
+`--ring-cells` cells between the hole's bounding box and the rectangle),
+`--n-r` radial layers and `--grading` (outer / inner radial spacing). When
+both are omitted the layers are graded so that the innermost spacing equals
+the hole-edge arc length (near-square elements where damage initiates) and
+the outermost equals `h`. `width/h` and `height/h` must be whole numbers and
+`CX - KX*h`, `CY - KY*h` must fall on the background grid.
+
+Sets: node and side sets `x-`, `x+`, `y-`, `y+`, `z-`, `z+`, `hole`, and the
+node set `outer` (the four in-plane edges, hole excluded, for damage Dirichlet
+conditions). Blocks `1 = plate`, `2 = ring`. Python: `plate_mesh(PlateOptions(
+..., hole=HoleSpec("circle", 2.5)))` and `plate_summary(mesh)`.
+
+The plain plate (no `--hole`) is the same background grid with the same
+sets, so a perforated and an unperforated plate of equal `h` share every
+background element.
+
 ## Pillowing and smoothing
 
 `--pillow` inserts an interface sheet. `--smoothing` runs the constrained

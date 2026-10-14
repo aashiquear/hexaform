@@ -239,6 +239,30 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--elements-per-radius", type=float, default=4.0)
     p.add_argument("--elements-per-ell", type=float, default=2.0)
 
+    p = sub.add_parser(
+        "plate",
+        help="rectangular plate, one hex through the thickness, optional conforming through-hole",
+    )
+    p.add_argument("--width", type=float, default=100.0, help="edge along x")
+    p.add_argument("--height", type=float, default=50.0, help="edge along y")
+    p.add_argument("--thickness", type=float, default=1.0, help="edge along z (one element)")
+    p.add_argument("--h", type=float, default=2.5, help="in-plane background cell size")
+    p.add_argument(
+        "--hole", default=None,
+        help="'circle:D' (diameter) or 'ellipse:2A,2B[,ANGLE_DEG]' (full axes); omit for a plain plate",
+    )
+    p.add_argument("--centre", type=float, nargs=2, default=None, metavar=("CX", "CY"),
+                   help="hole centre (default: plate centre)")
+    p.add_argument("--transition", type=int, nargs=2, default=None, metavar=("KX", "KY"),
+                   help="O-grid rectangle half-extents in background cells")
+    p.add_argument("--ring-cells", type=int, default=2,
+                   help="background cells between the hole's bounding box and the O-grid rectangle")
+    p.add_argument("--n-r", type=int, default=None, help="radial layers in the ring (auto)")
+    p.add_argument("--grading", type=float, default=None, help="outer/inner radial spacing (auto)")
+    p.add_argument("-o", "--output", default="output/plate.e")
+    p.add_argument("--write-vtk", action="store_true")
+    p.add_argument("--summary", default=None, help="write the plate summary JSON here")
+
     p = sub.add_parser("serve", help="start the local browser GUI")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
@@ -271,6 +295,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_suggest(args)
     if args.command == "serve":
         return _cmd_serve(args)
+    if args.command == "plate":
+        return _cmd_plate(args)
     parser.print_help()
     return 1
 
@@ -284,6 +310,55 @@ def _cmd_particles(args: argparse.Namespace) -> int:
     if result.validation is not None and not result.validation.passed:
         return 2
     return 0
+
+
+def parse_hole(text: str | None, centre=None):
+    """``'circle:5'`` -> circle of diameter 5; ``'ellipse:7.5,2.5,30'`` -> full axes and angle."""
+    from .plate import HoleSpec
+
+    if not text:
+        return None
+    kind, _, rest = text.partition(":")
+    vals = [float(v) for v in rest.split(",") if v.strip()]
+    kind = kind.strip().lower()
+    if kind == "circle" and len(vals) == 1:
+        return HoleSpec("circle", 0.5 * vals[0], centre=centre)
+    if kind == "ellipse" and len(vals) in (2, 3):
+        ang = vals[2] if len(vals) == 3 else 0.0
+        return HoleSpec("ellipse", 0.5 * vals[0], 0.5 * vals[1], centre=centre, angle=ang)
+    raise SystemExit(f"cannot parse hole {text!r}: use circle:D or ellipse:2A,2B[,ANGLE]")
+
+
+def _cmd_plate(args: argparse.Namespace) -> int:
+    import json
+
+    from .core.validation import validate
+    from .io import exodus
+    from .plate import PlateOptions, plate_mesh, plate_summary
+
+    centre = tuple(args.centre) if args.centre is not None else None
+    opts = PlateOptions(
+        width=args.width, height=args.height, thickness=args.thickness, h=args.h,
+        hole=parse_hole(args.hole, centre), ring_cells=args.ring_cells,
+        transition=tuple(args.transition) if args.transition else None,
+        n_r=args.n_r, grading=args.grading,
+    )
+    mesh = plate_mesh(opts)
+    report = validate(mesh, cell_size=args.h)
+    out = Path(args.output)
+    exodus.write(mesh, out, title="Hexaform plate")
+    if args.write_vtk:
+        from .io import vtk
+
+        vtk.write(mesh, out.with_suffix(".vtk"))
+    summary = plate_summary(mesh)
+    summary["validation"] = report.as_dict()
+    if args.summary:
+        Path(args.summary).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.summary).write_text(json.dumps(summary, indent=2, default=str))
+    print(mesh.summary())
+    print(report)
+    return 0 if report.passed else 2
 
 
 def _cmd_run(args: argparse.Namespace) -> int:

@@ -160,6 +160,16 @@ Constants: `MATRIX_BLOCK_ID = 1`, `INCLUSION_BLOCK_BASE = 100`.
 
 ---
 
+## `hexaform.plate`
+
+### `plate_mesh(opts: PlateOptions) -> HexMesh`
+
+Rectangular plate with one HEX8 through the thickness and an optional
+conforming through-hole (`HoleSpec(kind, a, b, centre, angle)`; O-grid ring
+with graded radial layers). `PlateOptions(width, height, thickness, h, hole,
+transition, ring_cells, n_r, grading, origin)`. `plate_summary(mesh)` returns
+the counts, hole-edge element sizes and quality numbers. See the user guide.
+
 ## `hexaform.io`
 
 ```python
