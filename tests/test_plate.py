@@ -22,6 +22,7 @@ def test_plain_plate_is_the_background_grid():
     assert np.all(signed_volumes(m.points, m.cells) > 0)
     assert "hole" not in m.node_sets
     assert len(m.node_sets["x-"]) == 21 * 2 and len(m.side_sets["z-"][0]) == 800
+    assert len(m.node_sets["grips"]) == 2 * 21 * 2 and len(m.node_sets["outer"]) == 2 * (41 + 21) * 2 - 8
     assert validate(m, cell_size=2.5).passed
 
 

@@ -34,7 +34,8 @@ interface conforms by construction.
 
 Sets written to the mesh: node and side sets ``x-``, ``x+``, ``y-``, ``y+``,
 ``z-``, ``z+`` (hexaform's boundary names), ``hole`` (node and side set on the
-hole surface) and the node set ``outer`` (the four in-plane edges).  Blocks:
+hole surface), the node set ``outer`` (the four in-plane edges) and the node
+set ``grips`` (the two x faces together).  Blocks:
 ``1 = plate`` (background) and ``2 = ring`` (the O-grid).
 
 Without a hole the plate is the plain structured grid with the same sets
@@ -395,6 +396,9 @@ def plate_mesh(opts: PlateOptions) -> HexMesh:
         mesh.add_node_set(name, nodes_on_plane(mesh, axis, value, tol))
     outer = np.concatenate([mesh.node_sets[n] for n in ("x-", "x+", "y-", "y+")])
     mesh.add_node_set("outer", outer)
+    # The two loaded ends together (a damage Dirichlet set that leaves the
+    # free edges and the hole unconstrained).
+    mesh.add_node_set("grips", np.concatenate([mesh.node_sets["x-"], mesh.node_sets["x+"]]))
     if hole is not None:
         cx, cy = meta["hole"]["centre"]  # type: ignore[index]
         on = hole.on_boundary(mesh.points[:, 0] - ox, mesh.points[:, 1] - oy, cx, cy, 1e-6 * h)

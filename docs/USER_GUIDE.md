@@ -140,9 +140,10 @@ the hole-edge arc length (near-square elements where damage initiates) and
 the outermost equals `h`. `width/h` and `height/h` must be whole numbers and
 `CX - KX*h`, `CY - KY*h` must fall on the background grid.
 
-Sets: node and side sets `x-`, `x+`, `y-`, `y+`, `z-`, `z+`, `hole`, and the
-node set `outer` (the four in-plane edges, hole excluded, for damage Dirichlet
-conditions). Blocks `1 = plate`, `2 = ring`. Python: `plate_mesh(PlateOptions(
+Sets: node and side sets `x-`, `x+`, `y-`, `y+`, `z-`, `z+`, `hole`, the
+node set `outer` (the four in-plane edges, hole excluded) and the node set
+`grips` (the two x faces, a damage Dirichlet set that leaves the free edges
+and the hole unconstrained). Blocks `1 = plate`, `2 = ring`. Python: `plate_mesh(PlateOptions(
 ..., hole=HoleSpec("circle", 2.5)))` and `plate_summary(mesh)`.
 
 The plain plate (no `--hole`) is the same background grid with the same
