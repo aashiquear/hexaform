@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 from .pipeline.config import (
     DomainConfig,
@@ -41,8 +41,8 @@ def _parse_count(text: str):
     return int(text)
 
 
-def _parse_seeds(text: str) -> List[int]:
-    out: List[int] = []
+def _parse_seeds(text: str) -> list[int]:
+    out: list[int] = []
     for chunk in text.split(","):
         chunk = chunk.strip()
         if "-" in chunk and not chunk.startswith("-"):
@@ -263,6 +263,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--write-vtk", action="store_true")
     p.add_argument("--summary", default=None, help="write the plate summary JSON here")
 
+    p = sub.add_parser(
+        "dogbone",
+        help="flat dog-bone tensile bar with shoulder fillets and a thickness profile along the gage",
+    )
+    p.add_argument("--length", type=float, default=25.4, help="total length along x")
+    p.add_argument("--gage-length", type=float, default=8.0)
+    p.add_argument("--gage-width", type=float, default=1.85)
+    p.add_argument("--grip-width", type=float, default=4.8)
+    p.add_argument("--fillet-radius", type=float, default=3.175)
+    p.add_argument("--grip-thickness", type=float, default=0.35, help="thickness of the grips (and of the whole bar without stations)")
+    p.add_argument("--stations", default=None,
+                   help="thickness stations along the gage as 'X:T,X:T,...' (X from the gage start); spline inside the gage")
+    p.add_argument("--h", type=float, default=0.2, help="cell size in the gage")
+    p.add_argument("--h-grip", type=float, default=None, help="cell size along x in the grips (default 2 h)")
+    p.add_argument("--n-z", type=int, default=1, help="elements through the thickness")
+    p.add_argument("-o", "--output", default="output/dogbone.e")
+    p.add_argument("--write-vtk", action="store_true")
+    p.add_argument("--summary", default=None, help="write the summary JSON here")
+
     p = sub.add_parser("serve", help="start the local browser GUI")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
@@ -297,6 +316,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_serve(args)
     if args.command == "plate":
         return _cmd_plate(args)
+    if args.command == "dogbone":
+        return _cmd_dogbone(args)
     parser.print_help()
     return 1
 
@@ -352,6 +373,46 @@ def _cmd_plate(args: argparse.Namespace) -> int:
 
         vtk.write(mesh, out.with_suffix(".vtk"))
     summary = plate_summary(mesh)
+    summary["validation"] = report.as_dict()
+    if args.summary:
+        Path(args.summary).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.summary).write_text(json.dumps(summary, indent=2, default=str))
+    print(mesh.summary())
+    print(report)
+    return 0 if report.passed else 2
+
+
+def parse_stations(text: str | None):
+    if not text:
+        return None
+    out = []
+    for item in text.split(","):
+        x, t = item.split(":")
+        out.append((float(x), float(t)))
+    return out
+
+
+def _cmd_dogbone(args: argparse.Namespace) -> int:
+    import json
+
+    from .core.validation import validate
+    from .dogbone import DogboneOptions, dogbone_mesh, dogbone_summary
+    from .io import exodus
+
+    opts = DogboneOptions(
+        length=args.length, gage_length=args.gage_length, gage_width=args.gage_width,
+        grip_width=args.grip_width, fillet_radius=args.fillet_radius, grip_thickness=args.grip_thickness,
+        stations=parse_stations(args.stations), h=args.h, h_grip=args.h_grip, n_z=args.n_z,
+    )
+    mesh = dogbone_mesh(opts)
+    report = validate(mesh, cell_size=args.h)
+    out = Path(args.output)
+    exodus.write(mesh, out, title="Hexaform dog-bone")
+    if args.write_vtk:
+        from .io import vtk
+
+        vtk.write(mesh, out.with_suffix(".vtk"))
+    summary = dogbone_summary(mesh)
     summary["validation"] = report.as_dict()
     if args.summary:
         Path(args.summary).parent.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added `hexaform dogbone` / `hexaform.dogbone.dogbone_mesh`: flat dog-bone
+  tensile bars with circular shoulder fillets and a measured thickness profile
+  along the gage (spline through stations, blended to the grips), node sets for
+  the grips, the gage ends and every station, blocks gage/shoulder/grip; tests
+  and user guide.
 - Added `hexaform plate` / `hexaform.plate.plate_mesh`: rectangular plates with
   one hexahedron through the thickness and a conforming circular or elliptical
   through-hole meshed by a graded O-grid ring (node/side sets `hole`, `outer`,

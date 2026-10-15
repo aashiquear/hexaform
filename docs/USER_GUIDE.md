@@ -150,6 +150,31 @@ The plain plate (no `--hole`) is the same background grid with the same
 sets, so a perforated and an unperforated plate of equal `h` share every
 background element.
 
+## Dog-bone tensile bars
+
+`hexaform dogbone` meshes a flat tensile coupon: grips of width
+`--grip-width`, a gage `--gage-width x --gage-length` in the middle, circular
+shoulder fillets `--fillet-radius` tangent to the gage edge, total
+`--length`, and a thickness profile along the gage given as measured
+stations `--stations X:T,...` (X from the gage start; natural cubic spline
+inside the gage, linear blend to `--grip-thickness` across each fillet,
+constant grips). One mapped hexahedral block: cell size `--h` in the gage,
+growing geometrically to `--h-grip` across the fillets, `--n-z` elements
+through the thickness.
+
+```bash
+hexaform dogbone --length 25.4 --gage-length 8 --gage-width 1.85 --grip-width 4.8 \
+  --fillet-radius 3.175 --grip-thickness 0.35 --stations 0:0.3399,2:0.3441,4:0.3540,6:0.3625,8:0.3715 \
+  --h 0.2 -o output/specimen_L1.e --write-vtk --summary output/specimen_L1.json
+```
+
+Sets: node and side sets `x-`, `x+` (the grip ends); node sets `grips`,
+`gage-`/`gage+` (the first and last station planes, for a gauge-length
+strain), `station_k` (one per station), `edge-`/`edge+` (the free in-plane
+edges) and `z-`/`z+` (the two faces). Blocks `1 = gage`, `2 = shoulder`,
+`3 = grip`. Python: `dogbone_mesh(DogboneOptions(...))`, `dogbone_summary(mesh)`,
+`half_width(opts, x)` and `thickness(opts, x)` for the analytic profiles.
+
 ## Pillowing and smoothing
 
 `--pillow` inserts an interface sheet. `--smoothing` runs the constrained
